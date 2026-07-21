@@ -92,14 +92,15 @@ else:
         st.session_state.rol_actual = None
         st.rerun()
 
+    orden_categorias = ["Oficiales / Jefes", "Choferes (Charlie)", "Mecánicos / Camioneros (MK)", "Combatientes",
+                        "Brigadistas (Bravo)", "Otros / Sin Clasificar"]
+    foto_provisoria = "https://cdn-icons-png.flaticon.com/512/149/149071.png"
+
     if st.session_state.rol_actual == "Usuario":
         st.subheader("📋 Estado Actual de Guardias por Rango y Turno")
-        orden_categorias = ["Oficiales / Jefes", "Choferes (Charlie)", "Mecánicos / Camioneros (MK)", "Combatientes",
-                            "Brigadistas (Bravo)", "Otros / Sin Clasificar"]
         col1, col2, col3, col4 = st.columns(4)
         turnos_info = [("☀️ Mañana", "Mañana", col1), ("🌤️ Tarde", "Tarde", col2), ("🌙 Noche", "Noche", col3),
                        ("☕ Franco", "Franco", col4)]
-        foto_provisoria = "https://cdn-icons-png.flaticon.com/512/149/149071.png"
 
         for titulo_turno, nombre_turno, columna in turnos_info:
             with columna:
@@ -119,26 +120,37 @@ else:
                                     st.markdown(f"**{p['Nombre']}**\n`{p['Indicativo']}`")
 
     elif st.session_state.rol_actual == "Admin":
-        st.subheader("🔒 Panel de Administración")
+        st.subheader("🔒 Panel de Administración Estilo Pizarrón")
+
         if df_personal is None or df_personal.empty:
             st.warning("⚠️ No se puede asignar personal porque el Excel no tiene datos válidos.")
         else:
-            col_admin_1, col_admin_2 = st.columns([1, 1])
-            with col_admin_1:
-                st.markdown("### Asignar Personal")
-                turno_elegido = st.selectbox("Seleccioná el turno:", ["Mañana", "Tarde", "Noche", "Franco"])
-                personal_ya_asignado = [p["Nombre"] for t in ["Mañana", "Tarde", "Noche", "Franco"] for p in
-                                        st.session_state.guardias_cargadas[t]]
-                df_disponibles = df_personal[~df_personal["Nombre"].isin(personal_ya_asignado)]
+            # Sección superior para agregar rápido
+            with st.container(border=True):
+                st.markdown("### ➕ Asignar Personal a Turno")
+                col_sel1, col_sel2, col_sel3 = st.columns([2, 2, 1])
 
-                if df_disponibles.empty:
-                    st.warning("⚠️ Ya se asignó todo el personal disponible.")
-                else:
-                    opciones_personal = [f"{row['Nombre']} ({row['Indicativo']})" for _, row in
-                                         df_disponibles.iterrows()]
-                    miembro_seleccionado = st.selectbox("Seleccionar brigadista disponible:", opciones_personal)
+                with col_sel1:
+                    personal_ya_asignado = [p["Nombre"] for t in ["Mañana", "Tarde", "Noche", "Franco"] for p in
+                                            st.session_state.guardias_cargadas[t]]
+                    df_disponibles = df_personal[~df_personal["Nombre"].isin(personal_ya_asignado)]
 
-                    if st.button("Guardar en el Turno", type="primary"):
+                    if df_disponibles.empty:
+                        st.info("⚠️ Todo el personal fue asignado.")
+                        opciones_personal = []
+                    else:
+                        opciones_personal = [f"{row['Nombre']} ({row['Indicativo']})" for _, row in
+                                             df_disponibles.iterrows()]
+
+                    miembro_seleccionado = st.selectbox("Personal disponible:",
+                                                        opciones_personal if opciones_personal else ["Sin disponibles"])
+
+                with col_sel2:
+                    turno_elegido = st.selectbox("Turno de destino:", ["Mañana", "Tarde", "Noche", "Franco"])
+
+                with col_sel3:
+                    st.markdown("<br>", unsafe_allow_html=True)
+                    if opciones_personal and st.button("Asignar", type="primary", use_container_width=True):
                         nombre_limpio = miembro_seleccionado.split(" (")[0]
                         indicativo_limpio = miembro_seleccionado.split(" (")[1].replace(")", "")
                         cat_miembro = df_personal[df_personal["Nombre"] == nombre_limpio]["Categoria"].values[0]
@@ -146,17 +158,34 @@ else:
                         nuevo_elemento = {"Nombre": nombre_limpio, "Indicativo": indicativo_limpio,
                                           "Categoria": cat_miembro}
                         st.session_state.guardias_cargadas[turno_elegido].append(nuevo_elemento)
-                        st.success(f"Se asignó a {nombre_limpio} en {turno_elegido}.")
+                        st.success(f"Asignado {nombre_limpio}")
                         st.rerun()
 
-            with col_admin_2:
-                st.markdown("### 👁️ Resumen Actual de Guardias")
-                for t in ["Mañana", "Tarde", "Noche", "Franco"]:
-                    asignados = st.session_state.guardias_cargadas[t]
-                    nombres_str = ", ".join(
-                        [f"{p['Nombre']} (`{p['Indicativo']}`)" for p in asignados]) if asignados else "Ninguno"
-                    st.markdown(f"**{t}:** {nombres_str}")
+            st.markdown("---")
+            st.markdown("### 📋 Pizarrón de Turnos Fijos (Hacé clic en 'Devolver' para sacarlos)")
 
-                if st.button("🗑️ Reiniciar / Borrar Todas las Guardias"):
-                    st.session_state.guardias_cargadas = {"Mañana": [], "Tarde": [], "Noche": [], "Franco": []}
-                    st.rerun()
+            # Los 4 turnos fijos en columnas visuales
+            col_m, col_t, col_n, col_f = st.columns(4)
+            pizarron_info = [("☀️ Mañana", "Mañana", col_m), ("🌤️ Tarde", "Tarde", col_t), ("🌙 Noche", "Noche", col_n),
+                             ("☕ Franco", "Franco", col_f)]
+
+            for titulo_t, nombre_t, col_columna in pizarron_info:
+                with col_columna:
+                    with st.container(border=True):
+                        st.markdown(f"#### {titulo_t}")
+                        asignados_t = st.session_state.guardias_cargadas.get(nombre_t, [])
+
+                        if not asignados_t:
+                            st.info("Vacío")
+                        else:
+                            for idx_p, p in enumerate(asignados_t):
+                                st.markdown(f"**{p['Nombre']}**\n`{p['Indicativo']}`")
+                                # Botón individual para devolver al listado de disponibles
+                                if st.button("↩️ Quitar", key=f"quitar_{nombre_t}_{idx_p}_{p['Nombre']}"):
+                                    st.session_state.guardias_cargadas[nombre_t].pop(idx_p)
+                                    st.rerun()
+                                st.markdown("---")
+
+            if st.button("🗑️ Reiniciar / Borrar Todas las Guardias"):
+                st.session_state.guardias_cargadas = {"Mañana": [], "Tarde": [], "Noche": [], "Franco": []}
+                st.rerun()
