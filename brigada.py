@@ -5,6 +5,7 @@ import os
 st.set_page_config(layout="wide")
 
 excel_filename = "datos.xlsx"
+guardadas_filename = "guardias_guardadas.xlsx"
 
 
 @st.cache_data
@@ -49,13 +50,42 @@ def cargar_datos():
 
 df_personal, error_detalle = cargar_datos()
 
+
+def cargar_guardias_persistentes():
+    if os.path.exists(guardadas_filename):
+        try:
+            df_g = pd.read_excel(guardadas_filename)
+            guardias = {"Mañana": [], "Tarde": [], "Noche": [], "Franco": []}
+            for _, row in df_g.iterrows():
+                turno = row["Turno"]
+                if turno in guardias:
+                    guardias[turno].append({
+                        "Nombre": row["Nombre"],
+                        "Indicativo": row["Indicativo"],
+                        "Categoria": row["Categoria"]
+                    })
+            return guardias
+        except Exception:
+            pass
+    return {"Mañana": [], "Tarde": [], "Noche": [], "Franco": []}
+
+
+def guardar_guardias_persistentes(guardias_dict):
+    lista_plana = []
+    for turno, personas in guardias_dict.items():
+        for p in personas:
+            lista_plana.append({
+                "Turno": turno,
+                "Nombre": p["Nombre"],
+                "Indicativo": p["Indicativo"],
+                "Categoria": p["Categoria"]
+            })
+    df_g = pd.DataFrame(lista_plana)
+    df_g.to_excel(guardadas_filename, index=False)
+
+
 if 'guardias_cargadas' not in st.session_state:
-    st.session_state.guardias_cargadas = {
-        "Mañana": [],
-        "Tarde": [],
-        "Noche": [],
-        "Franco": []
-    }
+    st.session_state.guardias_cargadas = cargar_guardias_persistentes()
 
 if 'sesion_iniciada' not in st.session_state:
     st.session_state.sesion_iniciada = False
@@ -120,12 +150,11 @@ else:
                                     st.markdown(f"**{p['Nombre']}**\n`{p['Indicativo']}`")
 
     elif st.session_state.rol_actual == "Admin":
-        st.subheader("🔒 Panel de Administración Estilo Pizarrón")
+        st.subheader("🔒 Panel de Administración Estilo Pizarrón (Guardado Automático)")
 
         if df_personal is None or df_personal.empty:
             st.warning("⚠️ No se puede asignar personal porque el Excel no tiene datos válidos.")
         else:
-            # Sección superior para agregar rápido
             with st.container(border=True):
                 st.markdown("### ➕ Asignar Personal a Turno")
                 col_sel1, col_sel2, col_sel3 = st.columns([2, 2, 1])
@@ -158,13 +187,13 @@ else:
                         nuevo_elemento = {"Nombre": nombre_limpio, "Indicativo": indicativo_limpio,
                                           "Categoria": cat_miembro}
                         st.session_state.guardias_cargadas[turno_elegido].append(nuevo_elemento)
+                        guardar_guardias_persistentes(st.session_state.guardias_cargadas)
                         st.success(f"Asignado {nombre_limpio}")
                         st.rerun()
 
             st.markdown("---")
-            st.markdown("### 📋 Pizarrón de Turnos Fijos (Hacé clic en 'Devolver' para sacarlos)")
+            st.markdown("### 📋 Pizarrón de Turnos Fijos (Hacé clic en 'Quitar' para devolverlos)")
 
-            # Los 4 turnos fijos en columnas visuales
             col_m, col_t, col_n, col_f = st.columns(4)
             pizarron_info = [("☀️ Mañana", "Mañana", col_m), ("🌤️ Tarde", "Tarde", col_t), ("🌙 Noche", "Noche", col_n),
                              ("☕ Franco", "Franco", col_f)]
@@ -180,12 +209,13 @@ else:
                         else:
                             for idx_p, p in enumerate(asignados_t):
                                 st.markdown(f"**{p['Nombre']}**\n`{p['Indicativo']}`")
-                                # Botón individual para devolver al listado de disponibles
                                 if st.button("↩️ Quitar", key=f"quitar_{nombre_t}_{idx_p}_{p['Nombre']}"):
                                     st.session_state.guardias_cargadas[nombre_t].pop(idx_p)
+                                    guardar_guardias_persistentes(st.session_state.guardias_cargadas)
                                     st.rerun()
                                 st.markdown("---")
 
             if st.button("🗑️ Reiniciar / Borrar Todas las Guardias"):
                 st.session_state.guardias_cargadas = {"Mañana": [], "Tarde": [], "Noche": [], "Franco": []}
+                guardar_guardias_persistentes(st.session_state.guardias_cargadas)
                 st.rerun()
